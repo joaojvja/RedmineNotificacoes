@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redmine Notificação</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+  <div class="header">
+    <h1>📋 Redmine Notificação</h1>
+    <div class="header-actions">
+      <button id="btn-refresh" title="Recarregar extensão"><img src="../icons/icons8-refresh-24.png" alt="Atualizar" width="16" height="16"></button>
+      <button id="btn-settings" title="Configurações"><img src="../icons/setting.png" alt="Configurações" width="16" height="16"></button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="mine">Meus RMs</button>
+    <button class="tab" data-tab="general">RMs Gerais</button>
+  </div>
+
+  <div id="not-configured" class="message hidden">
+    <p>⚠️ Configure a URL e API Key do Redmine nas <a href="#" id="link-settings">configurações</a>.</p>
+  </div>
+
+  <div id="loading" class="message hidden">
+    <p>Carregando...</p>
+  </div>
+
+  <div id="error" class="message error hidden">
+    <p id="error-text"></p>
+    <small id="error-hint" class="error-hint hidden"></small>
+  </div>
+
+  <div id="filters-bar" class="filters-bar hidden">
+    <div class="search-row">
+      <input type="text" id="search-input" placeholder="Pesquisar por assunto ou nº..." />
+      <button id="btn-search" title="Pesquisar">🔍</button>
+    </div>
+    <div class="filters-row">
+      <select id="filter-project">
+        <option value="">Todos projetos</option>
+      </select>
+      <select id="filter-priority">
+        <option value="">Prioridade</option>
+        <option value="3">Alta</option>
+        <option value="2">Normal</option>
+      </select>
+    </div>
+    <div class="filters-row filters-row-2">
+      <select id="filter-due">
+        <option value="">Prazo</option>
+        <option value="overdue">Atrasadas</option>
+        <option value="today">Vence hoje</option>
+        <option value="week">Esta semana</option>
+        <option value="no-date">Sem prazo</option>
+      </select>
+      <select id="filter-status">
+        <option value="">Situação</option>
+      </select>
+    </div>
+    <div class="filters-row filters-row-3">
+      <select id="filter-assignee">
+        <option value="">Responsável</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="summary" class="summary hidden">
+    <div class="stat stat-total">
+      <span class="stat-number" id="total-count">0</span>
+      <span class="stat-label">Total</span>
+    </div>
+    <div class="stat stat-overdue">
+      <span class="stat-number" id="overdue-count">0</span>
+      <span class="stat-label">Atrasadas</span>
+    </div>
+    <div class="stat stat-due-soon">
+      <span class="stat-number" id="due-soon-count">0</span>
+      <span class="stat-label">Vence logo</span>
+    </div>
+    <div class="stat stat-high">
+      <span class="stat-number" id="high-count">0</span>
+      <span class="stat-label">Alta Prior.</span>
+    </div>
+  </div>
+
+  <div id="issues-list" class="issues-list"></div>
+
+  <div id="paginator" class="paginator hidden">
+    <button id="btn-prev" disabled>← Anterior</button>
+    <span id="page-info">1 / 1</span>
+    <button id="btn-next">Próxima →</button>
+  </div>
+
+  <div id="empty" class="message hidden">
+    <p>✅ Nenhuma demanda aberta atribuída a você!</p>
+  </div>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,385 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 400px;
+  max-height: 600px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  color: #333;
+  background: transparent;
+  overflow: hidden;
+}
+
+.popup-container {
+  background: #f5f6f8;
+  overflow-y: auto;
+  max-height: 600px;
+  padding-bottom: 8px;
+}
+
+.popup-container::-webkit-scrollbar {
+  width: 5px;
+}
+
+.popup-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.popup-container::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.1);
+  border-radius: 10px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #c0392b, #e74c3c);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  /* border-radius: 16px 16px 14px 14px; */
+}
+
+.header h1 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tabs {
+  display: flex;
+  padding: 0 10px;
+  margin-top: 8px;
+  gap: 4px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  border-radius: 6px 6px 0 0;
+}
+
+.tab:hover {
+  color: #555;
+  border-bottom-color: #7c7c7b;
+  background: rgba(209, 209, 209, 0.04);
+}
+
+.tab.active {
+  color: #c0392b;
+  border-bottom-color: #c0392b;
+  background: rgba(192, 57, 43, 0.04);
+}
+
+.header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.header-actions button {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-actions button:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.message {
+  padding: 24px 16px;
+  text-align: center;
+  color: #666;
+}
+
+.message.error {
+  color: #c0392b;
+}
+
+.error-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
+  line-height: 1.4;
+}
+
+.message a {
+  color: #c0392b;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  border-radius: 12px;
+  margin: 10px 10px 0;
+}
+
+.stat {
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.stat-number {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.stat-label {
+  display: block;
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+  text-transform: uppercase;
+}
+
+.stat-overdue .stat-number { color: #e74c3c; }
+.stat-due-soon .stat-number { color: #f39c12; }
+.stat-high .stat-number { color: #8e44ad; }
+
+.issues-list {
+  padding: 6px 10px;
+}
+
+.issue-card {
+  background: white;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-left: 3px solid #dce0e4;
+  cursor: pointer;
+  transition: background 0.2s;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+.issue-card:hover {
+  background: #f9fafb;
+}
+
+.issue-card.priority-high {
+  border-left-color: #e74c3c;
+}
+
+.issue-card.priority-urgent {
+  border-left-color: #c0392b;
+  background: #fdf2f2;
+}
+
+.issue-card.priority-normal {
+  border-left-color: #3498db;
+}
+
+.issue-card.priority-low {
+  border-left-color: #95a5a6;
+}
+
+.issue-card.overdue {
+  border-left-color: #e74c3c;
+  background: #fef5f5;
+}
+
+.issue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.issue-id {
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+}
+
+.issue-priority {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.issue-priority.high { background: #fadbd8; color: #c0392b; }
+.issue-priority.urgent { background: #c0392b; color: white; }
+.issue-priority.normal { background: #d6eaf8; color: #2471a3; }
+.issue-priority.low { background: #eaecee; color: #717d7e; }
+
+.issue-subject {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.issue-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: #777;
+}
+
+.issue-meta span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.overdue-badge {
+  color: #e74c3c;
+  font-weight: 600;
+}
+
+.due-soon-badge {
+  color: #f39c12;
+  font-weight: 600;
+}
+
+.filters-bar {
+  border-radius: 12px;
+  margin: 6px 10px 0;
+}
+
+.search-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.search-row input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #ffffff;
+}
+
+.search-row input:focus {
+  border-color: #c0392b;
+  box-shadow: 0 0 0 2px rgba(192,57,43,0.1);
+  background: white;
+}
+
+.search-row button {
+  padding: 8px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #f7f8fa;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.search-row button:hover {
+  background: #eee;
+  border-color: #c0392b;
+}
+
+.filters-row {
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.filters-row-2 {
+  margin-top: 6px;
+}
+
+.filters-row-3 {
+  margin-top: 6px;
+}
+
+.filters-row select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 6px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #555;
+  background: #ffffff;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.filters-row select:focus {
+  border-color: #c0392b;
+}
+
+.no-results {
+  text-align: center;
+  padding: 20px;
+  color: #999;
+  font-size: 12px;
+}
+
+.paginator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px;
+}
+
+.paginator button {
+  padding: 6px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  font-size: 11px;
+  color: #555;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.paginator button:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.paginator button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#page-info {
+  font-size: 11px;
+  color: #777;
+}

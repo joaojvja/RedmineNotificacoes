@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head><title>Icon Generator</title></head>
+<body>
+<p>Abra este arquivo no navegador e clique nos botões para baixar os ícones.</p>
+<canvas id="canvas" width="128" height="128"></canvas>
+<br>
+<button onclick="download(16)">Download 16x16</button>
+<button onclick="download(48)">Download 48x48</button>
+<button onclick="download(128)">Download 128x128</button>
+
+<script>
+function drawIcon(size) {
+  const canvas = document.getElementById('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Background circle
+  ctx.fillStyle = '#c0392b';
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Letter R
+  ctx.fillStyle = 'white';
+  ctx.font = `bold ${size * 0.6}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('R', size/2, size/2 + size*0.02);
+
+  // Notification dot
+  ctx.fillStyle = '#f39c12';
+  ctx.beginPath();
+  ctx.arc(size * 0.75, size * 0.2, size * 0.15, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function download(size) {
+  drawIcon(size);
+  const canvas = document.getElementById('canvas');
+  const link = document.createElement('a');
+  link.download = `icon${size}.png`;
+  link.href = canvas.toDataURL();
+  link.click();
+}
+</script>
+</body>
+</html>

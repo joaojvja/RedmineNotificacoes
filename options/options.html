@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redmine Notificações — Configurações</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>⚙️ Configurações — Redmine Notificações</h1>
+
+    <form id="settings-form">
+      <section>
+        <h2>Conexão</h2>
+        <div class="field">
+          <label for="redmine-url">URL do Redmine</label>
+          <input type="url" id="redmine-url" placeholder="https://redmine.suaempresa.com" required>
+          <small>URL base do seu Redmine (sem barra final)</small>
+        </div>
+        <div class="field">
+          <label for="api-key">API Key</label>
+          <input type="password" id="api-key" placeholder="Sua chave de API do Redmine" required>
+          <small>Encontre em: Minha conta → Chave de acesso à API</small>
+        </div>
+        <button type="button" id="btn-test" class="btn btn-secondary">🔗 Testar Conexão</button>
+        <div id="test-result" class="test-result hidden"></div>
+      </section>
+
+      <section>
+        <h2>Intervalo de Verificação</h2>
+        <div class="field">
+          <label for="check-interval">Verificar a cada (minutos)</label>
+          <input type="number" id="check-interval" min="1" max="60" value="5">
+        </div>
+        <div class="field">
+          <label for="deadline-days">Alertar prazo com antecedência de (dias)</label>
+          <input type="number" id="deadline-days" min="1" max="30" value="3">
+        </div>
+      </section>
+
+      <section>
+        <h2>Notificações</h2>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="notify-deadlines" checked> Prazos (vencimento e proximidade)</label>
+          <label><input type="checkbox" id="notify-status" checked> Mudanças de status</label>
+          <label><input type="checkbox" id="notify-priority" checked> Mudanças de prioridade</label>
+          <label><input type="checkbox" id="notify-comments" checked> Novos comentários</label>
+          <label><input type="checkbox" id="notify-assignment" checked> Novas demandas atribuídas</label>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button type="submit" class="btn btn-primary">💾 Salvar Configurações</button>
+      </div>
+
+      <div id="save-status" class="save-status hidden"></div>
+    </form>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

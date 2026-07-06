@@ -1,0 +1,121 @@
+document.addEventListener('DOMContentLoaded', loadSettings);
+
+document.getElementById('settings-form').addEventListener('submit', saveSettings);
+document.getElementById('btn-test').addEventListener('click', testConnection);
+
+async function loadSettings() {
+  const settings = await chrome.storage.sync.get({
+    redmineUrl: '',
+    apiKey: '',
+    checkInterval: 5,
+    deadlineWarningDays: 3,
+    notifyDeadlines: true,
+    notifyStatus: true,
+    notifyPriority: true,
+    notifyComments: true,
+    notifyNewAssignment: true
+  });
+
+  document.getElementById('redmine-url').value = settings.redmineUrl;
+  document.getElementById('api-key').value = settings.apiKey;
+  document.getElementById('check-interval').value = settings.checkInterval;
+  document.getElementById('deadline-days').value = settings.deadlineWarningDays;
+  document.getElementById('notify-deadlines').checked = settings.notifyDeadlines;
+  document.getElementById('notify-status').checked = settings.notifyStatus;
+  document.getElementById('notify-priority').checked = settings.notifyPriority;
+  document.getElementById('notify-comments').checked = settings.notifyComments;
+  document.getElementById('notify-assignment').checked = settings.notifyNewAssignment;
+}
+
+async function saveSettings(e) {
+  e.preventDefault();
+
+  const rawUrl = document.getElementById('redmine-url').value.trim().replace(/\/$/, '');
+
+  // Validate URL scheme — only allow http(s)
+  if (rawUrl && !/^https?:\/\//i.test(rawUrl)) {
+    showSaveStatus('❌ A URL deve começar com http:// ou https://');
+    return;
+  }
+
+  const settings = {
+    redmineUrl: rawUrl,
+    apiKey: document.getElementById('api-key').value.trim(),
+    checkInterval: parseInt(document.getElementById('check-interval').value) || 5,
+    deadlineWarningDays: parseInt(document.getElementById('deadline-days').value) || 3,
+    notifyDeadlines: document.getElementById('notify-deadlines').checked,
+    notifyStatus: document.getElementById('notify-status').checked,
+    notifyPriority: document.getElementById('notify-priority').checked,
+    notifyComments: document.getElementById('notify-comments').checked,
+    notifyNewAssignment: document.getElementById('notify-assignment').checked
+  };
+
+  await chrome.storage.sync.set(settings);
+
+  // Update alarm interval
+  await chrome.alarms.clear('redmine-check');
+  await chrome.alarms.create('redmine-check', { periodInMinutes: settings.checkInterval });
+
+  showSaveStatus('✅ Configurações salvas com sucesso!');
+}
+
+async function testConnection() {
+  const url = document.getElementById('redmine-url').value.trim().replace(/\/$/, '');
+  const apiKey = document.getElementById('api-key').value.trim();
+  const resultEl = document.getElementById('test-result');
+
+  if (!url || !apiKey) {
+    showTestResult('Preencha a URL e API Key antes de testar.', false);
+    return;
+  }
+
+  if (!/^https?:\/\//i.test(url)) {
+    showTestResult('❌ A URL deve começar com http:// ou https://', false);
+    return;
+  }
+
+  resultEl.textContent = 'Testando...';
+  resultEl.className = 'test-result';
+
+  try {
+    const response = await fetch(`${url}/users/current.json`, {
+      headers: {
+        'X-Redmine-API-Key': apiKey,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        showTestResult('❌ API Key inválida. Verifique sua chave.', false);
+      } else {
+        showTestResult(`❌ Erro ${response.status}: ${response.statusText}`, false);
+      }
+      return;
+    }
+
+    const data = await response.json();
+    const user = data.user;
+    showTestResult(`✅ Conectado! Olá, ${user.firstname} ${user.lastname} (${user.login})`, true);
+  } catch (error) {
+    const msg = error.message || '';
+    if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror')) {
+      showTestResult('⛔ Sem conexão — Verifique: VPN ativa? Internet funcionando? URL correta?', false);
+    } else {
+      showTestResult(`❌ Não foi possível conectar: ${msg}`, false);
+    }
+  }
+}
+
+function showTestResult(message, success) {
+  const el = document.getElementById('test-result');
+  el.textContent = message;
+  el.className = `test-result ${success ? 'success' : 'error'}`;
+}
+
+function showSaveStatus(message) {
+  const el = document.getElementById('save-status');
+  el.textContent = message;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3000);
+}
