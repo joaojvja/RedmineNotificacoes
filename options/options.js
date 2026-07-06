@@ -13,7 +13,8 @@ async function loadSettings() {
     notifyStatus: true,
     notifyPriority: true,
     notifyComments: true,
-    notifyNewAssignment: true
+    notifyNewAssignment: true,
+    filterGroups: false
   });
 
   document.getElementById('redmine-url').value = settings.redmineUrl;
@@ -25,6 +26,7 @@ async function loadSettings() {
   document.getElementById('notify-priority').checked = settings.notifyPriority;
   document.getElementById('notify-comments').checked = settings.notifyComments;
   document.getElementById('notify-assignment').checked = settings.notifyNewAssignment;
+  document.getElementById('filter-groups').checked = settings.filterGroups;
 }
 
 async function saveSettings(e) {
@@ -32,7 +34,7 @@ async function saveSettings(e) {
 
   const rawUrl = document.getElementById('redmine-url').value.trim().replace(/\/$/, '');
 
-  // Validate URL scheme — only allow http(s)
+  // Validar esquema da URL — permitir apenas http(s)
   if (rawUrl && !/^https?:\/\//i.test(rawUrl)) {
     showSaveStatus('❌ A URL deve começar com http:// ou https://');
     return;
@@ -47,12 +49,13 @@ async function saveSettings(e) {
     notifyStatus: document.getElementById('notify-status').checked,
     notifyPriority: document.getElementById('notify-priority').checked,
     notifyComments: document.getElementById('notify-comments').checked,
-    notifyNewAssignment: document.getElementById('notify-assignment').checked
+    notifyNewAssignment: document.getElementById('notify-assignment').checked,
+    filterGroups: document.getElementById('filter-groups').checked
   };
 
   await chrome.storage.sync.set(settings);
 
-  // Update alarm interval
+  // Atualizar intervalo do alarme
   await chrome.alarms.clear('redmine-check');
   await chrome.alarms.create('redmine-check', { periodInMinutes: settings.checkInterval });
 

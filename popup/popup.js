@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnRefresh.addEventListener('click', () => {
     if (activeTab === 'mine') loadIssues();
+    else if (activeTab === 'favorites') loadFavorites();
     else loadGeneralIssues();
   });
   btnSettings.addEventListener('click', openSettings);
@@ -18,21 +19,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   searchInput.addEventListener('input', () => {
     if (activeTab === 'mine') applyFilters();
+    else if (activeTab === 'favorites') applyFavoriteFilters();
   });
   searchInput.addEventListener('keydown', (e) => {
     console.log('[Popup] keydown:', e.key, 'activeTab:', activeTab);
-    if (e.key === 'Enter' && activeTab === 'general') {
-      generalPage = 0;
-      loadGeneralIssues();
+    if (e.key === 'Enter') {
+      if (activeTab === 'general') { generalPage = 0; loadGeneralIssues(); }
+      else if (activeTab === 'favorites') applyFavoriteFilters();
     }
   });
   document.getElementById('btn-search').addEventListener('click', () => {
     console.log('[Popup] btn-search clicked, activeTab:', activeTab);
     if (activeTab === 'mine') applyFilters();
+    else if (activeTab === 'favorites') applyFavoriteFilters();
     else { generalPage = 0; loadGeneralIssues(); }
   });
   filterProject.addEventListener('change', () => {
     if (activeTab === 'mine') applyFilters();
+    else if (activeTab === 'favorites') applyFavoriteFilters();
     else { generalPage = 0; loadGeneralIssues(); }
   });
   filterPriority.addEventListener('change', () => {
@@ -45,27 +49,41 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   filterStatus.addEventListener('change', () => {
     if (activeTab === 'mine') applyFilters();
+    else if (activeTab === 'favorites') applyFavoriteFilters();
     else { generalPage = 0; loadGeneralIssues(); }
   });
 
-  // Tab switching
+  // Alternância de abas
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       tabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       activeTab = tab.dataset.tab;
-      // Reset all filters on tab switch
+      // Resetar todos os filtros ao trocar de aba
       searchInput.value = '';
       filterProject.value = '';
       filterPriority.value = '';
       filterDue.value = '';
       filterStatus.value = '';
       document.getElementById('filter-assignee').value = '';
+
+      // Restaurar visibilidade de todas as linhas de filtro primeiro
+      document.querySelector('.filters-row-2').style.display = '';
+      document.getElementById('filter-priority').style.display = '';
+      document.getElementById('filter-due').style.display = '';
+
       if (activeTab === 'mine') {
         document.getElementById('paginator').classList.add('hidden');
         document.querySelector('.filters-row-3').style.display = 'none';
         document.getElementById('btn-search').classList.add('hidden');
         loadIssues();
+      } else if (activeTab === 'favorites') {
+        document.getElementById('paginator').classList.add('hidden');
+        document.querySelector('.filters-row-3').style.display = 'none';
+        document.getElementById('filter-priority').style.display = 'none';
+        document.getElementById('filter-due').style.display = 'none';
+        document.getElementById('btn-search').classList.add('hidden');
+        loadFavorites();
       } else {
         document.querySelector('.filters-row-3').style.display = 'flex';
         document.getElementById('btn-search').classList.remove('hidden');
@@ -96,29 +114,135 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Hide assignee filter and search button initially (only for Geral tab)
+  // Ocultar filtro de responsável e botão de busca inicialmente (apenas para aba Geral)
   document.querySelector('.filters-row-3').style.display = 'none';
   document.getElementById('btn-search').classList.add('hidden');
 
-  // Populate status filter on startup (used by both tabs)
+  // Popular filtro de status na inicialização (usado por ambas as abas)
   populateStatusFilter();
 
-  loadIssues();
+  // Carregar IDs dos favoritos antes de renderizar qualquer issue
+  loadFavoriteIds().then(() => loadIssues());
 });
 
 let allIssues = [];
 let allGeneralIssues = [];
+let allFavoriteIssues = [];
 let activeTab = 'mine';
 let generalPage = 0;
 let generalTotalCount = 0;
 let generalLimit = 25;
 let generalFiltersPopulated = false;
+let favoriteIds = new Set();
 
 function openSettings() {
   chrome.runtime.openOptionsPage();
 }
 
-//API Layer (fetches directly, same as options page)
+//Favoritos
+
+async function loadFavoriteIds() {
+  const data = await chrome.storage.local.get({ favorites: [] });
+  favoriteIds = new Set(data.favorites);
+}
+
+async function saveFavoriteIds() {
+  await chrome.storage.local.set({ favorites: [...favoriteIds] });
+}
+
+async function toggleFavorite(issueId) {
+  if (favoriteIds.has(issueId)) {
+    favoriteIds.delete(issueId);
+  } else {
+    favoriteIds.add(issueId);
+  }
+  await saveFavoriteIds();
+}
+
+async function loadFavorites() {
+  showSection('loading');
+
+  await loadFavoriteIds();
+  if (favoriteIds.size === 0) {
+    hideAll();
+    document.getElementById('filters-bar').classList.add('hidden');
+    document.getElementById('issues-list').innerHTML = '<div class="no-results">Nenhum favorito salvo. Clique na ⭐ de uma demanda para favoritar.</div>';
+    document.getElementById('issues-list').classList.remove('hidden');
+    return;
+  }
+
+  try {
+    const config = await getConfig();
+    if (!config.url || !config.apiKey) {
+      showSection('not-configured');
+      return;
+    }
+
+    const issues = [];
+    const idsToRemove = [];
+    for (const id of favoriteIds) {
+      try {
+        const data = await apiFetch(`/issues/${id}.json`);
+        if (data && data.issue) issues.push(data.issue);
+      } catch (e) {
+        // A issue pode ter sido deletada
+        idsToRemove.push(id);
+      }
+    }
+
+    // Limpar issues deletadas dos favoritos
+    if (idsToRemove.length > 0) {
+      idsToRemove.forEach(id => favoriteIds.delete(id));
+      await saveFavoriteIds();
+    }
+
+    if (issues.length === 0) {
+      hideAll();
+      document.getElementById('filters-bar').classList.add('hidden');
+      document.getElementById('issues-list').innerHTML = '<div class="no-results">Nenhum favorito encontrado.</div>';
+      document.getElementById('issues-list').classList.remove('hidden');
+      return;
+    }
+
+    allFavoriteIssues = issues;
+    populateProjectFilter(allFavoriteIssues);
+    document.getElementById('filters-bar').classList.remove('hidden');
+    renderIssues(allFavoriteIssues);
+    document.getElementById('paginator').classList.add('hidden');
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+function applyFavoriteFilters() {
+  const search = document.getElementById('search-input').value.toLowerCase().trim();
+  const projectId = document.getElementById('filter-project').value;
+  const statusFilter = document.getElementById('filter-status').value;
+
+  let filtered = allFavoriteIssues.filter(issue => {
+    if (search) {
+      const text = `#${issue.id} ${issue.subject} ${issue.project?.name || ''} ${issue.status?.name || ''}`.toLowerCase();
+      if (!text.includes(search)) return false;
+    }
+    if (projectId && String(issue.project?.id) !== projectId) return false;
+    if (statusFilter && String(issue.status?.id) !== statusFilter) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    document.getElementById('issues-list').innerHTML = '<div class="no-results">Nenhum favorito encontrado com os filtros aplicados.</div>';
+    hideAll();
+    document.getElementById('filters-bar').classList.remove('hidden');
+    document.getElementById('issues-list').classList.remove('hidden');
+    return;
+  }
+
+  renderIssues(filtered);
+  document.getElementById('filters-bar').classList.remove('hidden');
+  document.getElementById('paginator').classList.add('hidden');
+}
+
+//Camada de API (busca diretamente, igual à página de opções)
 
 async function getConfig() {
   const config = await chrome.storage.sync.get({ redmineUrl: '', apiKey: '' });
@@ -143,6 +267,15 @@ async function apiFetch(path, params = {}) {
   return await response.json();
 }
 
+async function fetchCurrentUserId() {
+  try {
+    const data = await apiFetch('/users/current.json');
+    return data.user?.id || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function loadIssues() {
   showSection('loading');
 
@@ -160,13 +293,30 @@ async function loadIssues() {
       sort: 'priority:desc,due_date:asc'
     });
 
-    const issues = data.issues || [];
+    let issues = data.issues || [];
+
+    // Filtrar issues atribuídas a grupos se configuração habilitada
+    const settings = await chrome.storage.sync.get({ filterGroups: false });
+    if (settings.filterGroups) {
+      const userId = await fetchCurrentUserId();
+      if (userId) {
+        issues = issues.filter(i => i.assigned_to?.id === userId);
+      }
+    }
+
     if (issues.length === 0) {
       showSection('empty');
+      chrome.action.setBadgeText({ text: '' });
       return;
     }
 
     allIssues = issues;
+
+    // Atualizar badge imediatamente baseado na contagem de atrasadas
+    const overdueCount = issues.filter(i => i.due_date && daysUntilDue(i.due_date) < 0).length;
+    chrome.action.setBadgeText({ text: overdueCount > 0 ? String(overdueCount) : '' });
+    chrome.action.setBadgeBackgroundColor({ color: '#e74c3c' });
+
     populateProjectFilter(allIssues);
     document.getElementById('filters-bar').classList.remove('hidden');
     renderIssues(allIssues);
@@ -180,7 +330,7 @@ function renderIssues(issues) {
   const listEl = document.getElementById('issues-list');
   const summaryEl = document.getElementById('summary');
 
-  // Calculate stats
+  // Calcular estatísticas
   let overdue = 0;
   let dueSoon = 0;
   let highPriority = 0;
@@ -194,10 +344,10 @@ function renderIssues(issues) {
     if (issue.priority && issue.priority.id >= 3) highPriority++;
   });
 
-  // On General tab, always show API total (already filtered server-side)
+  // Na aba Geral, sempre mostrar total da API (já filtrado no servidor)
   if (activeTab === 'general') {
     document.getElementById('total-count').textContent = generalTotalCount;
-    // Stats will be updated by loadGeneralStats()
+    // Estatísticas serão atualizadas por loadGeneralStats()
   } else {
     document.getElementById('total-count').textContent = issues.length;
     document.getElementById('overdue-count').textContent = overdue;
@@ -205,7 +355,7 @@ function renderIssues(issues) {
     document.getElementById('high-count').textContent = highPriority;
   }
 
-  // Sort: overdue first, then by due date, then priority
+  // Ordenar: atrasadas primeiro, depois por data de vencimento, depois prioridade
   issues.sort((a, b) => {
     const aDays = a.due_date ? daysUntilDue(a.due_date) : 999;
     const bDays = b.due_date ? daysUntilDue(b.due_date) : 999;
@@ -213,7 +363,7 @@ function renderIssues(issues) {
     return (b.priority?.id || 0) - (a.priority?.id || 0);
   });
 
-  // Render cards
+  // Renderizar cards
   listEl.innerHTML = '';
   issues.forEach(issue => {
     listEl.appendChild(createIssueCard(issue));
@@ -230,6 +380,7 @@ function createIssueCard(issue) {
   card.className = `issue-card ${getPriorityClass(issue.priority)} ${isOverdue(issue) ? 'overdue' : ''}`;
 
   const days = issue.due_date ? daysUntilDue(issue.due_date) : null;
+  const isFav = favoriteIds.has(issue.id);
 
   let dueBadge = '';
   if (days !== null) {
@@ -247,7 +398,10 @@ function createIssueCard(issue) {
   card.innerHTML = `
     <div class="issue-header">
       <span class="issue-id">#${issue.id} — ${escapeHtml(issue.project?.name || '')}</span>
-      <span class="issue-priority ${getPriorityLabel(issue.priority)}">${escapeHtml(issue.priority?.name || '')}</span>
+      <div class="issue-header-right">
+        <button class="btn-favorite ${isFav ? 'is-favorite' : ''}" data-issue-id="${issue.id}" title="${isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}">⭐</button>
+        <span class="issue-priority ${getPriorityLabel(issue.priority)}">${escapeHtml(issue.priority?.name || '')}</span>
+      </div>
     </div>
     <div class="issue-subject">${escapeHtml(issue.subject)}</div>
     <div class="issue-meta">
@@ -257,6 +411,22 @@ function createIssueCard(issue) {
       ${dueBadge}
     </div>
   `;
+
+  // Clique no botão de favorito
+  const favBtn = card.querySelector('.btn-favorite');
+  favBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await toggleFavorite(issue.id);
+    favBtn.classList.toggle('is-favorite');
+    favBtn.title = favoriteIds.has(issue.id) ? 'Remover dos favoritos' : 'Adicionar aos favoritos';
+    // Se na aba de favoritos, remover o card
+    if (activeTab === 'favorites') {
+      card.remove();
+      if (favoriteIds.size === 0) {
+        document.getElementById('issues-list').innerHTML = '<div class="no-results">Nenhum favorito salvo. Clique na ⭐ de uma demanda para favoritar.</div>';
+      }
+    }
+  });
 
   card.addEventListener('click', () => {
     chrome.storage.sync.get('redmineUrl', (result) => {
@@ -269,7 +439,7 @@ function createIssueCard(issue) {
   return card;
 }
 
-//Filters
+//Filtros
 
 function populateProjectFilter(issues) {
   const select = document.getElementById('filter-project');
@@ -296,18 +466,18 @@ function applyFilters() {
   const statusFilter = document.getElementById('filter-status').value;
 
   let filtered = allIssues.filter(issue => {
-    // Search
+    // Busca
     if (search) {
       const text = `#${issue.id} ${issue.subject} ${issue.project?.name || ''} ${issue.status?.name || ''}`.toLowerCase();
       if (!text.includes(search)) return false;
     }
-    // Project filter
+    // Filtro de projeto
     if (projectId && String(issue.project?.id) !== projectId) return false;
-    // Priority filter
+    // Filtro de prioridade
     if (priorityId && String(issue.priority?.id) !== priorityId) return false;
-    // Status filter (by ID)
+    // Filtro de status (por ID)
     if (statusFilter && String(issue.status?.id) !== statusFilter) return false;
-    // Due date filter
+    // Filtro de data de vencimento
     if (dueFilter) {
       const days = issue.due_date ? daysUntilDue(issue.due_date) : null;
       if (dueFilter === 'overdue' && (days === null || days >= 0)) return false;
@@ -335,7 +505,7 @@ function applyFilters() {
   document.getElementById('filters-bar').classList.remove('hidden');
 }
 
-//General Tab
+//Aba Geral
 
 async function loadGeneralIssues() {
   showSection('loading');
@@ -364,7 +534,7 @@ async function loadGeneralIssues() {
       sort: 'updated_on:desc'
     };
 
-    // If query is a number
+    // Se a busca é um número
     if (filters.query && /^\d+$/.test(filters.query)) {
       try {
         const idData = await apiFetch(`/issues/${filters.query}.json`);
@@ -379,7 +549,7 @@ async function loadGeneralIssues() {
           return;
         }
       } catch (e) {
-        // ID not found
+        // ID não encontrado
         console.log('[Popup] Issue ID not found, trying subject search...');
       }
     }
@@ -451,7 +621,7 @@ async function loadGeneralStats() {
     document.getElementById('due-soon-count').textContent = dueSoonData.total_count || 0;
     document.getElementById('high-count').textContent = highData.total_count || 0;
   } catch (e) {
-    // Stats are non-critical, fail silently
+    // Estatísticas não são críticas, falhar silenciosamente
   }
 }
 
@@ -470,13 +640,13 @@ async function populateStatusFilter() {
       });
     }
   } catch (e) {
-    // Non-critical
+    // Não-crítico
   }
 }
 
 async function populateAssigneeFilter() {
   try {
-    // Get assignees from open issues
+    // Obter responsáveis das issues abertas
     const data = await apiFetch('/issues.json', { status_id: 'open', limit: '100', sort: 'updated_on:desc' });
     const userMap = new Map();
     (data.issues || []).forEach(issue => {
@@ -494,11 +664,11 @@ async function populateAssigneeFilter() {
       select.appendChild(opt);
     });
   } catch (e) {
-    // Non-critical
+    // Não-crítico
   }
 }
 
-// Calculate stats locally from a set of issues (used when server stats aren't available)
+// Calcular estatísticas localmente a partir de um conjunto de issues (usado quando estatísticas do servidor não estão disponíveis)
 function updateStatsFromIssues(issues) {
   let overdue = 0;
   let dueSoon = 0;
@@ -531,7 +701,7 @@ function updatePaginator() {
   document.getElementById('btn-next').disabled = generalPage >= totalPages - 1;
 }
 
-//Helpers
+//Utilitários
 
 function daysUntilDue(dateStr) {
   const due = new Date(dateStr + 'T23:59:59');

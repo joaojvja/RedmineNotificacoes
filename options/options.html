@@ -42,11 +42,18 @@
       <section>
         <h2>Notificações</h2>
         <div class="checkbox-group">
-          <label><input type="checkbox" id="notify-deadlines" checked> Prazos (vencimento e proximidade)</label>
+          <label><input type="checkbox" id="notify-deadlines" checked> Prazos (vencimento e proximidade) <span class="info-icon" title="Renotifica a cada 3 horas enquanto o Redmine estiver atrasado ou com prazo próximo.">i</span></label>
           <label><input type="checkbox" id="notify-status" checked> Mudanças de status</label>
           <label><input type="checkbox" id="notify-priority" checked> Mudanças de prioridade</label>
           <label><input type="checkbox" id="notify-comments" checked> Novos comentários</label>
           <label><input type="checkbox" id="notify-assignment" checked> Novas demandas atribuídas</label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Filtros</h2>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="filter-groups"> Ignorar demandas atribuídas a times/grupos <span class="info-icon" title="Mostra apenas demandas atribuídas diretamente a você, excluindo as atribuídas a grupos dos quais você faz parte.">i</span></label>
         </div>
       </section>
 

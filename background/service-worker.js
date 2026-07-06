@@ -1,14 +1,14 @@
 const ALARM_NAME = 'redmine-check';
 const CHECK_INTERVAL_MINUTES = 5;
 
-//Initialization
+//Inicialização
 chrome.runtime.onInstalled.addListener(async () => {
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: CHECK_INTERVAL_MINUTES });
   console.log('[Redmine Notificações] Extension installed/reloaded. Running silent sync...');
   await silentSync();
 });
 
-//Re-check when service worker starts up (e.g. after idle/termination)
+//Re-verificação quando o service worker inicia (ex: após idle/encerramento)
 chrome.runtime.onStartup.addListener(async () => {
   console.log('[Redmine Notificações] Browser/SW startup. Running silent sync...');
   await silentSync();
@@ -20,12 +20,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-//React immediately when settings change
+//Reagir imediatamente quando as configurações mudam
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
   console.log('[Redmine Notificações] Settings changed:', Object.keys(changes).join(', '));
 
-  // Update alarm interval if it changed
+  // Atualizar intervalo do alarme se mudou
   if (changes.checkInterval) {
     const newInterval = changes.checkInterval.newValue || CHECK_INTERVAL_MINUTES;
     await chrome.alarms.clear(ALARM_NAME);
@@ -33,37 +33,43 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
     console.log('[Redmine Notificações] Alarm updated to', newInterval, 'min.');
   }
 
-  // If deadlines notification was re-enabled, reset notified flags
+  // Se notificação de prazos foi reativada, resetar flags de notificação
   if (changes.notifyDeadlines && changes.notifyDeadlines.newValue === true && changes.notifyDeadlines.oldValue === false) {
-    console.log('[Redmine Notificações] Prazos re-enabled. Resetting deadline flags.');
+    console.log('[Redmine Notificações] Prazos re-enabled. Resetting deadline timestamps.');
     const state = await getPreviousState();
     for (const id of Object.keys(state)) {
-      state[id].notifiedOverdue = false;
-      state[id].notifiedDueSoon = false;
+      state[id].notifiedOverdueAt = null;
+      state[id].notifiedDueSoonAt = null;
     }
     await chrome.storage.local.set({ issueState: state });
   }
 
   if (changes.notifyNewAssignment && changes.notifyNewAssignment.newValue === true && changes.notifyNewAssignment.oldValue === false) {
     console.log('[Redmine Notificações] Novas demandas re-enabled. Resetting state for fresh detection.');
-    // No flag to reset — new assignments are detected by absence of prev entry
+    // Nenhum flag para resetar — novas atribuições são detectadas pela ausência de entrada anterior
   }
 });
 
-// Silent first sync — saves state so next check has a baseline
+// Primeira sincronização silenciosa — salva estado para que a próxima verificação tenha uma base
 async function silentSync() {
   const config = await getConfig();
   if (!config.url || !config.apiKey) return;
   try {
     const issues = await fetchAssignedIssues(config);
     await saveCurrentState(issues);
-    console.log('[Redmine Notificações] Silent sync complete. State saved for', issues.length, 'issues.');
+
+    // Atualizar badge imediatamente ao iniciar
+    const urgentCount = issues.filter(i => isUrgent(i)).length;
+    chrome.action.setBadgeText({ text: urgentCount > 0 ? String(urgentCount) : '' });
+    chrome.action.setBadgeBackgroundColor({ color: '#e74c3c' });
+
+    console.log('[Redmine Notificações] Silent sync complete. State saved for', issues.length, 'issues. Badge:', urgentCount);
   } catch (e) {
     console.error('[Redmine Notificações] Silent sync failed:', e);
   }
 }
 
-//Main Check Logic
+//Lógica Principal de Verificação
 
 async function checkRedmine() {
   const config = await getConfig();
@@ -76,7 +82,7 @@ async function checkRedmine() {
     const issues = await fetchAssignedIssues(config);
     const previousState = await getPreviousState();
 
-    // If no previous state exists, do a silent sync (first run or browser restart)
+    // Se não existe estado anterior, fazer sync silenciosa (primeira execução ou reinício do navegador)
     if (Object.keys(previousState).length === 0) {
       console.log('[Redmine Notificações] No previous state. Saving baseline silently.');
       await saveCurrentState(issues);
@@ -94,12 +100,12 @@ async function checkRedmine() {
     }));
     console.log('[Redmine Notificações] Alerts generated:', alerts.map(a => `${a.type} #${a.issue.id}`));
 
-    // Update badge
+    // Atualizar badge
     const urgentCount = issues.filter(i => isUrgent(i)).length;
     chrome.action.setBadgeText({ text: urgentCount > 0 ? String(urgentCount) : '' });
     chrome.action.setBadgeBackgroundColor({ color: '#e74c3c' });
 
-    // Send notifications — double-check config before sending
+    // Enviar notificações — verificação dupla da config antes de enviar
     const sentAlerts = [];
     for (const alert of alerts) {
       if (shouldNotify(alert.type, config)) {
@@ -111,7 +117,7 @@ async function checkRedmine() {
       }
     }
 
-    // Save current state (mark sent notifications so they don't repeat)
+    // Salvar estado atual (marcar notificações enviadas para não repetir)
     await saveCurrentState(issues, sentAlerts);
 
   } catch (error) {
@@ -119,7 +125,7 @@ async function checkRedmine() {
   }
 }
 
-// Final safety gate: verify the notification type is allowed by config
+// Verificação final: confirmar que o tipo de notificação é permitido pela config
 function shouldNotify(type, config) {
   switch (type) {
     case 'deadline_overdue':
@@ -138,7 +144,20 @@ function shouldNotify(type, config) {
   }
 }
 
-//Redmine API
+//API Redmine
+
+async function fetchCurrentUserId(config) {
+  const url = new URL('/users/current.json', config.url);
+  const response = await fetch(url.toString(), {
+    headers: {
+      'X-Redmine-API-Key': config.apiKey,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!response.ok) return null;
+  const data = await response.json();
+  return data.user?.id || null;
+}
 
 async function fetchAssignedIssues(config) {
   const url = new URL('/issues.json', config.url);
@@ -162,8 +181,20 @@ async function fetchAssignedIssues(config) {
   }
 
   const data = await response.json();
-  console.log('[Redmine Meus RMs] RESPONSE: total_count=' + data.total_count + ', issues_returned=' + (data.issues?.length || 0));
-  return data.issues || [];
+  let issues = data.issues || [];
+  console.log('[Redmine Meus RMs] RESPONSE: total_count=' + data.total_count + ', issues_returned=' + issues.length);
+
+  // Filtrar issues atribuídas a grupos se configuração habilitada
+  if (config.filterGroups) {
+    const userId = await fetchCurrentUserId(config);
+    if (userId) {
+      const before = issues.length;
+      issues = issues.filter(i => i.assigned_to?.id === userId);
+      console.log('[Redmine Meus RMs] Filtered groups: ' + before + ' → ' + issues.length);
+    }
+  }
+
+  return issues;
 }
 
 async function fetchIssueDetail(config, issueId) {
@@ -183,7 +214,7 @@ async function fetchIssueDetail(config, issueId) {
 }
 
 async function fetchUsers(config) {
-  // /users.json requires admin; fallback: extract assignees from open issues
+  // /users.json requer admin; alternativa: extrair responsáveis das issues abertas
   const url = new URL('/issues.json', config.url);
   url.searchParams.set('status_id', 'open');
   url.searchParams.set('limit', '100');
@@ -229,7 +260,7 @@ async function fetchStatuses(config) {
 }
 
 async function fetchGeneralIssues(config, query, offset = 0, filters = {}) {
-  // If query is a number, search by issue ID directly
+  // Se a busca é um número, buscar por ID da issue diretamente
   if (query && /^\d+$/.test(query)) {
     console.log('[Redmine Geral] Searching by issue ID:', query);
     const idUrl = new URL(`/issues/${query}.json`, config.url);
@@ -265,7 +296,7 @@ async function fetchGeneralIssues(config, query, offset = 0, filters = {}) {
   if (filters.assigneeId) {
     url.searchParams.set('assigned_to_id', filters.assigneeId);
   }
-  // Due date filters
+  // Filtros de data de vencimento
   if (filters.dueFilter) {
     const now = new Date();
     if (filters.dueFilter === 'overdue') {
@@ -298,7 +329,7 @@ async function fetchGeneralIssues(config, query, offset = 0, filters = {}) {
 
   const data = await response.json();
   console.log('[Redmine Geral] RESPONSE: total_count=' + data.total_count + ', offset=' + data.offset + ', limit=' + data.limit + ', issues_returned=' + (data.issues?.length || 0));
-  // Log priorities for debugging
+  // Log das prioridades para depuração
   const priorities = [...new Set((data.issues || []).map(i => `${i.priority?.name}(id=${i.priority?.id})`))];
   if (priorities.length > 0) console.log('[Redmine Geral] Priorities in results:', priorities.join(', '));
   return { issues: data.issues || [], totalCount: data.total_count || 0, offset: data.offset || 0, limit: data.limit || 25 };
@@ -308,7 +339,7 @@ async function fetchGeneralStats(config, query, filters = {}) {
   const today = new Date().toISOString().split('T')[0];
   const nextWeek = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // Build base params (same filters as main query)
+  // Construir parâmetros base (mesmos filtros da consulta principal)
   function buildBaseUrl() {
     const url = new URL('/issues.json', config.url);
     url.searchParams.set('status_id', filters.statusId || 'open');
@@ -322,15 +353,15 @@ async function fetchGeneralStats(config, query, filters = {}) {
 
   const headers = { 'X-Redmine-API-Key': config.apiKey, 'Content-Type': 'application/json' };
 
-  // Overdue: due_date <= today
+  // Atrasadas: due_date <= hoje
   const overdueUrl = buildBaseUrl();
   overdueUrl.searchParams.set('due_date', `<=${today}`);
 
-  // Due soon: due_date between today and +3 days
+  // Vence em breve: due_date entre hoje e +3 dias
   const dueSoonUrl = buildBaseUrl();
   dueSoonUrl.searchParams.set('due_date', `><${today}|${nextWeek}`);
 
-  // High priority: Alta(3) + Urgente(4) + Imediata(5)
+  // Alta prioridade: Alta(3) + Urgente(4) + Imediata(5)
   const highUrl = buildBaseUrl();
   highUrl.searchParams.set('priority_id', '3|4|5');
 
@@ -356,7 +387,7 @@ async function fetchGeneralStats(config, query, filters = {}) {
   }
 }
 
-//Change Detection
+//Detecção de Mudanças
 
 function detectChanges(currentIssues, previousState, config) {
   const alerts = [];
@@ -366,7 +397,7 @@ function detectChanges(currentIssues, previousState, config) {
     const prev = previousState[issue.id];
 
     if (!prev) {
-      // New issue assigned (only if enabled)
+      // Nova demanda atribuída (somente se habilitado)
       if (config.notifyNewAssignment) {
         alerts.push({
           type: 'new_assignment',
@@ -377,18 +408,23 @@ function detectChanges(currentIssues, previousState, config) {
       continue;
     }
 
-    // Deadline alert (only if enabled and not already notified)
+    // Alerta de prazo (somente se habilitado; re-notificar após período de cooldown)
     if (config.notifyDeadlines && issue.due_date) {
       const dueDate = new Date(issue.due_date);
       const daysUntilDue = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+      const overdueCooldownMs = 3 * 60 * 60 * 1000; // 3h entre lembretes de atrasadas
+      const dueSoonCooldownMs = 3 * 60 * 60 * 1000; // 3h entre lembretes de vencimento próximo
 
-      if (daysUntilDue <= 0 && !prev.notifiedOverdue) {
+      const overdueCooldownExpired = !prev.notifiedOverdueAt || (now - new Date(prev.notifiedOverdueAt)) >= overdueCooldownMs;
+      const dueSoonCooldownExpired = !prev.notifiedDueSoonAt || (now - new Date(prev.notifiedDueSoonAt)) >= dueSoonCooldownMs;
+
+      if (daysUntilDue <= 0 && overdueCooldownExpired) {
         alerts.push({
           type: 'deadline_overdue',
           issue,
           message: `⚠️ ATRASADA: #${issue.id} "${issue.subject}" — venceu ${Math.abs(daysUntilDue)} dia(s) atrás!`
         });
-      } else if (daysUntilDue > 0 && daysUntilDue <= (config.deadlineWarningDays || 3) && !prev.notifiedDueSoon) {
+      } else if (daysUntilDue > 0 && daysUntilDue <= (config.deadlineWarningDays || 3) && dueSoonCooldownExpired) {
         alerts.push({
           type: 'deadline_approaching',
           issue,
@@ -397,7 +433,7 @@ function detectChanges(currentIssues, previousState, config) {
       }
     }
 
-    // Status change (only if enabled)
+    // Mudança de status (somente se habilitado)
     if (config.notifyStatus && prev.statusId !== issue.status?.id) {
       alerts.push({
         type: 'status_change',
@@ -406,7 +442,7 @@ function detectChanges(currentIssues, previousState, config) {
       });
     }
 
-    // Priority change (only if enabled)
+    // Mudança de prioridade (somente se habilitado)
     if (config.notifyPriority && prev.priorityId !== issue.priority?.id) {
       alerts.push({
         type: 'priority_change',
@@ -415,7 +451,7 @@ function detectChanges(currentIssues, previousState, config) {
       });
     }
 
-    // New comments (only if enabled)
+    // Novos comentários (somente se habilitado)
     if (config.notifyComments && issue.journals && issue.journals.length > (prev.journalCount || 0)) {
       const newJournals = issue.journals.slice(prev.journalCount || 0);
       const comments = newJournals.filter(j => j.notes && j.notes.trim().length > 0);
@@ -441,7 +477,7 @@ function isUrgent(issue) {
   return daysUntilDue <= 1;
 }
 
-//Notifications
+//Notificações
 
 function sendNotification(alert, config) {
   const notificationId = `redmine-${alert.type}-${alert.issue.id}-${Date.now()}`;
@@ -468,12 +504,12 @@ function getNotificationTitle(type) {
   return titles[type] || 'Redmine Notificações';
 }
 
-// Click notification to open issue
+// Clique na notificação para abrir a issue
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   if (!notificationId.startsWith('redmine-')) return;
 
-  // Format: redmine-{type}-{issueId}-{timestamp}
-  // Extract issueId: skip 'redmine-', then skip the type (which uses underscores), get the numeric ID
+  // Formato: redmine-{tipo}-{issueId}-{timestamp}
+  // Extrair issueId: pular 'redmine-', pular o tipo (que usa underscores), obter o ID numérico
   const match = notificationId.match(/^redmine-[a-z_]+-(\d+)-\d+$/);
   if (!match) return;
 
@@ -487,7 +523,7 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   chrome.notifications.clear(notificationId);
 });
 
-//Storage Helpers
+//Helpers de Armazenamento
 
 async function getConfig() {
   const result = await chrome.storage.sync.get({
@@ -499,7 +535,8 @@ async function getConfig() {
     notifyStatus: true,
     notifyPriority: true,
     notifyComments: true,
-    notifyNewAssignment: true
+    notifyNewAssignment: true,
+    filterGroups: false
   });
 
   return {
@@ -511,7 +548,8 @@ async function getConfig() {
     notifyStatus: result.notifyStatus,
     notifyPriority: result.notifyPriority,
     notifyComments: result.notifyComments,
-    notifyNewAssignment: result.notifyNewAssignment
+    notifyNewAssignment: result.notifyNewAssignment,
+    filterGroups: result.filterGroups
   };
 }
 
@@ -524,7 +562,7 @@ async function saveCurrentState(issues, sentAlerts = []) {
   const state = {};
   const previousState = await getPreviousState();
 
-  // Build a set of which issues got deadline notifications sent
+  // Construir um set de quais issues receberam notificações de prazo neste ciclo
   const notifiedOverdueIds = new Set();
   const notifiedDueSoonIds = new Set();
   for (const alert of sentAlerts) {
@@ -532,6 +570,7 @@ async function saveCurrentState(issues, sentAlerts = []) {
     if (alert.type === 'deadline_approaching') notifiedDueSoonIds.add(alert.issue.id);
   }
 
+  const nowIso = new Date().toISOString();
   for (const issue of issues) {
     const prev = previousState[issue.id] || {};
     state[issue.id] = {
@@ -540,15 +579,15 @@ async function saveCurrentState(issues, sentAlerts = []) {
       journalCount: issue.journals?.length || 0,
       dueDate: issue.due_date,
       updatedOn: issue.updated_on,
-      // Mark as notified only if we actually sent the notification
-      notifiedOverdue: prev.notifiedOverdue || notifiedOverdueIds.has(issue.id),
-      notifiedDueSoon: prev.notifiedDueSoon || notifiedDueSoonIds.has(issue.id)
+      // Armazenar timestamp da última notificação (para re-notificação baseada em cooldown)
+      notifiedOverdueAt: notifiedOverdueIds.has(issue.id) ? nowIso : (prev.notifiedOverdueAt || null),
+      notifiedDueSoonAt: notifiedDueSoonIds.has(issue.id) ? nowIso : (prev.notifiedDueSoonAt || null)
     };
   }
   await chrome.storage.local.set({ issueState: state });
 }
 
-//Message Handling
+//Tratamento de Mensagens
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'checkNow') {
