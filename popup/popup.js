@@ -20,12 +20,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (activeTab === 'mine') applyFilters();
   });
   searchInput.addEventListener('keydown', (e) => {
+    console.log('[Popup] keydown:', e.key, 'activeTab:', activeTab);
     if (e.key === 'Enter' && activeTab === 'general') {
       generalPage = 0;
       loadGeneralIssues();
     }
   });
   document.getElementById('btn-search').addEventListener('click', () => {
+    console.log('[Popup] btn-search clicked, activeTab:', activeTab);
     if (activeTab === 'mine') applyFilters();
     else { generalPage = 0; loadGeneralIssues(); }
   });
@@ -361,6 +363,27 @@ async function loadGeneralIssues() {
       offset: String(offset),
       sort: 'updated_on:desc'
     };
+
+    // If query is a number
+    if (filters.query && /^\d+$/.test(filters.query)) {
+      try {
+        const idData = await apiFetch(`/issues/${filters.query}.json`);
+        if (idData && idData.issue) {
+          generalTotalCount = 1;
+          allGeneralIssues = [idData.issue];
+          document.getElementById('filters-bar').classList.remove('hidden');
+          document.getElementById('total-count').textContent = 1;
+          updateStatsFromIssues(allGeneralIssues);
+          renderIssues(allGeneralIssues);
+          document.getElementById('paginator').classList.add('hidden');
+          return;
+        }
+      } catch (e) {
+        // ID not found
+        console.log('[Popup] Issue ID not found, trying subject search...');
+      }
+    }
+
     if (filters.query) params.subject = `~${filters.query}`;
     if (filters.projectId) params.project_id = filters.projectId;
     if (filters.priorityId) params.priority_id = filters.priorityId;
@@ -473,6 +496,24 @@ async function populateAssigneeFilter() {
   } catch (e) {
     // Non-critical
   }
+}
+
+// Calculate stats locally from a set of issues (used when server stats aren't available)
+function updateStatsFromIssues(issues) {
+  let overdue = 0;
+  let dueSoon = 0;
+  let highPriority = 0;
+  issues.forEach(issue => {
+    if (issue.due_date) {
+      const days = daysUntilDue(issue.due_date);
+      if (days < 0) overdue++;
+      else if (days <= 3) dueSoon++;
+    }
+    if (issue.priority && issue.priority.id >= 3) highPriority++;
+  });
+  document.getElementById('overdue-count').textContent = overdue;
+  document.getElementById('due-soon-count').textContent = dueSoon;
+  document.getElementById('high-count').textContent = highPriority;
 }
 
 function updatePaginator() {

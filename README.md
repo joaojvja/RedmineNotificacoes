@@ -4,29 +4,23 @@ Extensão para Chrome/Edge que notifica sobre suas demandas no Redmine em tempo 
 
 ## Funcionalidades
 
-- 🔔 **Notificações de prazo** — Alerta quando uma issue está perto de vencer ou atrasada
+- 🔔 **Notificações de prazo** — Alerta quando um REDMINE está perto de vencer ou atrasada
 - 🔄 **Mudanças de status** — Notifica quando o status de uma demanda muda
 - 🔴 **Prioridade alterada** — Alerta sobre mudanças de prioridade
-- 💬 **Novos comentários** — Notifica sobre novos comentários em suas issues
+- 💬 **Novos comentários** — Notifica sobre novos comentários em seu REDMINE
 - 📋 **Novas atribuições** — Avisa quando uma nova demanda é atribuída a você
 - 📊 **Painel popup** — Visão geral rápida de todas as suas demandas abertas
 
 ## Instalação
 
-### 1. Gerar os ícones
-
-1. Abra o arquivo `icons/generate-icons.html` no navegador
-2. Clique nos 3 botões para baixar os ícones (16x16, 48x48, 128x128)
-3. Mova os arquivos baixados para a pasta `icons/`
-
-### 2. Instalar no Chrome/Edge
+### 1. Instalar no Chrome/Edge
 
 1. Abra `chrome://extensions/` (ou `edge://extensions/`)
 2. Ative o **Modo do desenvolvedor** (toggle no canto superior direito)
 3. Clique em **"Carregar sem compactação"**
 4. Selecione a pasta `redmine-Notificações/`
 
-### 3. Configurar
+### 2. Configurar
 
 1. Clique no ícone da extensão → ⚙️ (engrenagem)
 2. Informe a **URL do seu Redmine** (ex: `https://redmine.empresa.com`)
@@ -38,10 +32,10 @@ Extensão para Chrome/Edge que notifica sobre suas demandas no Redmine em tempo 
 ## Como funciona
 
 - A extensão consulta a API REST do Redmine a cada X minutos (configurável)
-- Compara o estado atual das issues com o estado anterior
+- Compara o estado atual dos REDMINES com o estado anterior
 - Envia notificações do navegador para qualquer mudança detectada
-- O badge vermelho no ícone mostra quantas issues urgentes existem
-- Clique em uma notificação para abrir a issue diretamente no Redmine
+- O badge vermelho no ícone mostra quantos REDMINES urgentes existem
+- Clique em uma notificação para abrir o REDMINE diretamente no Redmine
 
 ## Requisitos
 
