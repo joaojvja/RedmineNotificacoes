@@ -40,6 +40,16 @@ async function saveSettings(e) {
     return;
   }
 
+  // Solicitar permissão de host para o domínio do Redmine
+  if (rawUrl) {
+    const hostPattern = new URL(rawUrl).origin + '/*';
+    const granted = await chrome.permissions.request({ origins: [hostPattern] });
+    if (!granted) {
+      showSaveStatus('❌ Permissão de acesso ao servidor negada. A extensão precisa dessa permissão para funcionar.');
+      return;
+    }
+  }
+
   const settings = {
     redmineUrl: rawUrl,
     apiKey: document.getElementById('api-key').value.trim(),
@@ -74,6 +84,14 @@ async function testConnection() {
 
   if (!/^https?:\/\//i.test(url)) {
     showTestResult('❌ A URL deve começar com http:// ou https://', false);
+    return;
+  }
+
+  // Solicitar permissão de host para o domínio do Redmine
+  const hostPattern = new URL(url).origin + '/*';
+  const granted = await chrome.permissions.request({ origins: [hostPattern] });
+  if (!granted) {
+    showTestResult('❌ Permissão de acesso ao servidor negada.', false);
     return;
   }
 
