@@ -89,7 +89,7 @@ async function checkRedmine() {
       return;
     }
 
-    const alerts = detectChanges(issues, previousState, config);
+    const alerts = await detectChanges(issues, previousState, config);
 
     console.log('[Redmine Notificações] Config:', JSON.stringify({
       'Prazos (vencimento e proximidade)': config.notifyDeadlines,
@@ -389,7 +389,7 @@ async function fetchGeneralStats(config, query, filters = {}) {
 
 //Detecção de Mudanças
 
-function detectChanges(currentIssues, previousState, config) {
+async function detectChanges(currentIssues, previousState, config) {
   const alerts = [];
   const now = new Date();
 
@@ -452,16 +452,32 @@ function detectChanges(currentIssues, previousState, config) {
     }
 
     // Novos comentários (somente se habilitado)
-    if (config.notifyComments && issue.journals && issue.journals.length > (prev.journalCount || 0)) {
-      const newJournals = issue.journals.slice(prev.journalCount || 0);
-      const comments = newJournals.filter(j => j.notes && j.notes.trim().length > 0);
-      if (comments.length > 0) {
-        const lastComment = comments[comments.length - 1];
-        alerts.push({
-          type: 'new_comment',
-          issue,
-          message: `💬 Novo comentário em #${issue.id} "${issue.subject}" por ${lastComment.user?.name || 'Alguém'}`
-        });
+    if (config.notifyComments) {
+      const currentJournalCount = issue.journals?.length || 0;
+      const prevJournalCount = prev.journalCount || 0;
+
+      if (currentJournalCount > prevJournalCount) {
+        let newJournals = issue.journals.slice(prevJournalCount);
+        let comments = newJournals.filter(j => j.notes && j.notes.trim().length > 0);
+
+        // Fallback: list endpoint pode não retornar 'notes' nos journals — buscar detalhe individual
+        if (comments.length === 0) {
+          console.log('[Redmine Notificações] Journals sem notes no list endpoint para #' + issue.id + '. Buscando detalhe...');
+          const detail = await fetchIssueDetail(config, issue.id);
+          if (detail?.journals && detail.journals.length > prevJournalCount) {
+            newJournals = detail.journals.slice(prevJournalCount);
+            comments = newJournals.filter(j => j.notes && j.notes.trim().length > 0);
+          }
+        }
+
+        if (comments.length > 0) {
+          const lastComment = comments[comments.length - 1];
+          alerts.push({
+            type: 'new_comment',
+            issue,
+            message: `💬 Novo comentário em #${issue.id} "${issue.subject}" por ${lastComment.user?.name || 'Alguém'}`
+          });
+        }
       }
     }
   }

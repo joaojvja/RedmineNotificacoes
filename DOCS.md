@@ -174,17 +174,6 @@ sequenceDiagram
 
 ---
 
-## Code Smells Identificados
-
-| # | Tipo | Local | Descrição |
-|---|------|-------|-----------|
-| 1 | Debug logs | `service-worker.js` | Muitos `console.log` — aceitável para extensão em desenvolvimento |
-| 2 | Magic numbers | `service-worker.js` | IDs de prioridade (3, 4, 5) hardcoded — IDs Redmine default |
-| 3 | Lógica duplicada | `popup.js` | Filtros client-side vs server-side compartilham padrão mas divergem em implementação — by design |
-| 4 | Nomes mistos | Todo o projeto | Mistura PT/EN em variáveis e mensagens — aceitável para projeto interno brasileiro |
-
----
-
 ## API Redmine Consumida
 
 | Endpoint | Método | Uso |
