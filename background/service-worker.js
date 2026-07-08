@@ -504,7 +504,6 @@ function sendNotification(alert, config) {
     title: getNotificationTitle(alert.type),
     message: alert.message,
     priority: alert.type === 'deadline_overdue' ? 2 : 1,
-    requireInteraction: alert.type === 'deadline_overdue'
   });
 }
 
