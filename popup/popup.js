@@ -558,6 +558,14 @@ async function loadGeneralIssues() {
     if (filters.projectId) params.project_id = filters.projectId;
     if (filters.priorityId) params.priority_id = filters.priorityId;
     if (filters.assigneeId) params.assigned_to_id = filters.assigneeId;
+    if (filters.dueFilter) {
+      const today = new Date().toISOString().split('T')[0];
+      const weekLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      if (filters.dueFilter === 'overdue') params.due_date = `<=${today}`;
+      else if (filters.dueFilter === 'today') params.due_date = `${today}`;
+      else if (filters.dueFilter === 'week') params.due_date = `><${today}|${weekLater}`;
+      else if (filters.dueFilter === 'no-date') params.due_date = '!*';
+    }
 
     const data = await apiFetch('/issues.json', params);
 
@@ -596,6 +604,7 @@ async function loadGeneralStats() {
   try {
     const today = new Date().toISOString().split('T')[0];
     const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const weekLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const baseParams = {};
     const query = document.getElementById('search-input').value.trim();
@@ -603,6 +612,7 @@ async function loadGeneralStats() {
     const priorityId = document.getElementById('filter-priority').value;
     const statusId = document.getElementById('filter-status').value;
     const assigneeId = document.getElementById('filter-assignee').value;
+    const dueFilter = document.getElementById('filter-due').value;
 
     if (query) baseParams.subject = `~${query}`;
     if (projectId) baseParams.project_id = projectId;
@@ -611,15 +621,58 @@ async function loadGeneralStats() {
     baseParams.status_id = statusId || 'open';
     baseParams.limit = '1';
 
-    const [overdueData, dueSoonData, highData] = await Promise.all([
-      apiFetch('/issues.json', { ...baseParams, due_date: `<=${today}` }),
-      apiFetch('/issues.json', { ...baseParams, due_date: `><${today}|${soon}` }),
-      apiFetch('/issues.json', { ...baseParams, priority_id: '3|4|5' })
-    ]);
+    let overdueCount = 0;
+    let dueSoonCount = 0;
+    let highCount = 0;
 
-    document.getElementById('overdue-count').textContent = overdueData.total_count || 0;
-    document.getElementById('due-soon-count').textContent = dueSoonData.total_count || 0;
-    document.getElementById('high-count').textContent = highData.total_count || 0;
+    if (dueFilter === 'overdue') {
+      // Todas já são atrasadas; "vence em breve" = 0
+      const [totalData, highData] = await Promise.all([
+        apiFetch('/issues.json', { ...baseParams, due_date: `<=${today}` }),
+        apiFetch('/issues.json', { ...baseParams, due_date: `<=${today}`, priority_id: '3|4|5' })
+      ]);
+      overdueCount = totalData.total_count || 0;
+      dueSoonCount = 0;
+      highCount = highData.total_count || 0;
+    } else if (dueFilter === 'today') {
+      // Vence hoje: não está atrasada, mas está "em breve"
+      const [totalData, highData] = await Promise.all([
+        apiFetch('/issues.json', { ...baseParams, due_date: `${today}` }),
+        apiFetch('/issues.json', { ...baseParams, due_date: `${today}`, priority_id: '3|4|5' })
+      ]);
+      overdueCount = 0;
+      dueSoonCount = totalData.total_count || 0;
+      highCount = highData.total_count || 0;
+    } else if (dueFilter === 'week') {
+      // Dentro da semana: atrasadas=0, "em breve" = subset até 3 dias
+      const [dueSoonData, highData] = await Promise.all([
+        apiFetch('/issues.json', { ...baseParams, due_date: `><${today}|${soon}` }),
+        apiFetch('/issues.json', { ...baseParams, due_date: `><${today}|${weekLater}`, priority_id: '3|4|5' })
+      ]);
+      overdueCount = 0;
+      dueSoonCount = dueSoonData.total_count || 0;
+      highCount = highData.total_count || 0;
+    } else if (dueFilter === 'no-date') {
+      // Sem prazo: atrasadas=0, em breve=0
+      const highData = await apiFetch('/issues.json', { ...baseParams, due_date: '!*', priority_id: '3|4|5' });
+      overdueCount = 0;
+      dueSoonCount = 0;
+      highCount = highData.total_count || 0;
+    } else {
+      // Sem filtro de prazo: comportamento padrão
+      const [overdueData, dueSoonData, highData] = await Promise.all([
+        apiFetch('/issues.json', { ...baseParams, due_date: `<=${today}` }),
+        apiFetch('/issues.json', { ...baseParams, due_date: `><${today}|${soon}` }),
+        apiFetch('/issues.json', { ...baseParams, priority_id: '3|4|5' })
+      ]);
+      overdueCount = overdueData.total_count || 0;
+      dueSoonCount = dueSoonData.total_count || 0;
+      highCount = highData.total_count || 0;
+    }
+
+    document.getElementById('overdue-count').textContent = overdueCount;
+    document.getElementById('due-soon-count').textContent = dueSoonCount;
+    document.getElementById('high-count').textContent = highCount;
   } catch (e) {
     // Estatísticas não são críticas, falhar silenciosamente
   }
