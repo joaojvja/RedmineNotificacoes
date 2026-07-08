@@ -90,14 +90,6 @@ async function checkRedmine() {
     }
 
     const alerts = await detectChanges(issues, previousState, config);
-
-    console.log('[Redmine Notificações] Config:', JSON.stringify({
-      'Prazos (vencimento e proximidade)': config.notifyDeadlines,
-      'Mudanças de status': config.notifyStatus,
-      'Mudanças de prioridade': config.notifyPriority,
-      'Novos comentários': config.notifyComments,
-      'Novas demandas atribuídas': config.notifyNewAssignment
-    }));
     console.log('[Redmine Notificações] Alerts generated:', alerts.map(a => `${a.type} #${a.issue.id}`));
 
     // Atualizar badge
@@ -167,8 +159,6 @@ async function fetchAssignedIssues(config) {
   url.searchParams.set('sort', 'priority:desc,due_date:asc');
   url.searchParams.set('include', 'journals');
 
-  console.log('[Redmine Meus RMs] REQUEST:', url.toString());
-
   const response = await fetch(url.toString(), {
     headers: {
       'X-Redmine-API-Key': config.apiKey,
@@ -182,15 +172,12 @@ async function fetchAssignedIssues(config) {
 
   const data = await response.json();
   let issues = data.issues || [];
-  console.log('[Redmine Meus RMs] RESPONSE: total_count=' + data.total_count + ', issues_returned=' + issues.length);
-
   // Filtrar issues atribuídas a grupos se configuração habilitada
   if (config.filterGroups) {
     const userId = await fetchCurrentUserId(config);
     if (userId) {
       const before = issues.length;
       issues = issues.filter(i => i.assigned_to?.id === userId);
-      console.log('[Redmine Meus RMs] Filtered groups: ' + before + ' → ' + issues.length);
     }
   }
 
@@ -453,14 +440,18 @@ async function detectChanges(currentIssues, previousState, config) {
 
     // Novos comentários (somente se habilitado)
     if (config.notifyComments) {
+      // journals é confiável se veio como array com conteúdo; array vazio pode ser truncamento da API
+      const journalsAvailableFromList = Array.isArray(issue.journals) && issue.journals.length > 0;
       const currentJournalCount = issue.journals?.length || 0;
       const prevJournalCount = prev.journalCount || 0;
+      const issueUpdated = issue.updated_on !== prev.updatedOn;
 
-      if (currentJournalCount > prevJournalCount) {
+      if (journalsAvailableFromList && currentJournalCount > prevJournalCount) {
+        // Path A: Journals disponíveis no list endpoint e contagem aumentou
         let newJournals = issue.journals.slice(prevJournalCount);
         let comments = newJournals.filter(j => j.notes && j.notes.trim().length > 0);
 
-        // Fallback: list endpoint pode não retornar 'notes' nos journals — buscar detalhe individual
+        // Fallback: list endpoint pode não retornar 'notes' nos journals 
         if (comments.length === 0) {
           console.log('[Redmine Notificações] Journals sem notes no list endpoint para #' + issue.id + '. Buscando detalhe...');
           const detail = await fetchIssueDetail(config, issue.id);
@@ -477,6 +468,38 @@ async function detectChanges(currentIssues, previousState, config) {
             issue,
             message: `💬 Novo comentário em #${issue.id} "${issue.subject}" por ${lastComment.user?.name || 'Alguém'}`
           });
+        }
+        issue._journalCountVerified = true;
+      } else if (!journalsAvailableFromList) {
+        // Path B: List endpoint NÃO retorna journals
+        const needsVerification = !prev.journalCountVerified || issueUpdated;
+
+        if (needsVerification) {
+          console.log('[Redmine Notificações] Path B para #' + issue.id + ': verificando journals via detalhe...' +
+            (prev.journalCountVerified ? ' (issue atualizada)' : ' (baseline inicial)'));
+          const detail = await fetchIssueDetail(config, issue.id);
+          if (detail?.journals) {
+            const detailCount = detail.journals.length;
+            issue._resolvedJournalCount = detailCount;
+            issue._journalCountVerified = true;
+
+            // Só alertar se já tínhamos baseline verificado E a contagem aumentou
+            if (prev.journalCountVerified && detailCount > prevJournalCount) {
+              const newJournals = detail.journals.slice(prevJournalCount);
+              const comments = newJournals.filter(j => j.notes && j.notes.trim().length > 0);
+              if (comments.length > 0) {
+                const lastComment = comments[comments.length - 1];
+                console.log('[Redmine Notificações] Path B: novo comentário detectado em #' + issue.id + ' (' + prevJournalCount + ' → ' + detailCount + ')');
+                alerts.push({
+                  type: 'new_comment',
+                  issue,
+                  message: `💬 Novo comentário em #${issue.id} "${issue.subject}" por ${lastComment.user?.name || 'Alguém'}`
+                });
+              }
+            } else if (!prev.journalCountVerified) {
+              console.log('[Redmine Notificações] Path B: baseline estabelecido para #' + issue.id + ' (' + detailCount + ' journals)');
+            }
+          }
         }
       }
     }
@@ -591,7 +614,8 @@ async function saveCurrentState(issues, sentAlerts = []) {
     state[issue.id] = {
       statusId: issue.status?.id,
       priorityId: issue.priority?.id,
-      journalCount: issue.journals?.length || 0,
+      journalCount: issue._resolvedJournalCount ?? (Array.isArray(issue.journals) && issue.journals.length > 0 ? issue.journals.length : (prev.journalCount || 0)),
+      journalCountVerified: issue._journalCountVerified || (Array.isArray(issue.journals) && issue.journals.length > 0) || prev.journalCountVerified || false,
       dueDate: issue.due_date,
       updatedOn: issue.updated_on,
       // Armazenar timestamp da última notificação (para re-notificação baseada em cooldown)

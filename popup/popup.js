@@ -22,14 +22,12 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (activeTab === 'favorites') applyFavoriteFilters();
   });
   searchInput.addEventListener('keydown', (e) => {
-    console.log('[Popup] keydown:', e.key, 'activeTab:', activeTab);
     if (e.key === 'Enter') {
       if (activeTab === 'general') { generalPage = 0; loadGeneralIssues(); }
       else if (activeTab === 'favorites') applyFavoriteFilters();
     }
   });
   document.getElementById('btn-search').addEventListener('click', () => {
-    console.log('[Popup] btn-search clicked, activeTab:', activeTab);
     if (activeTab === 'mine') applyFilters();
     else if (activeTab === 'favorites') applyFavoriteFilters();
     else { generalPage = 0; loadGeneralIssues(); }
@@ -256,7 +254,6 @@ async function apiFetch(path, params = {}) {
   const url = new URL(path, config.url);
   Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
 
-  console.log('[Popup] FETCH:', url.toString());
   const response = await fetch(url.toString(), {
     headers: { 'X-Redmine-API-Key': config.apiKey, 'Content-Type': 'application/json' }
   });
@@ -550,7 +547,6 @@ async function loadGeneralIssues() {
         }
       } catch (e) {
         // ID não encontrado
-        console.log('[Popup] Issue ID not found, trying subject search...');
       }
     }
 
