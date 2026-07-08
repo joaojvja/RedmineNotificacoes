@@ -101,7 +101,6 @@ async function checkRedmine() {
     const sentAlerts = [];
     for (const alert of alerts) {
       if (shouldNotify(alert.type, config)) {
-        console.log('[Redmine Notificações] SENDING:', alert.type, '#' + alert.issue.id);
         sendNotification(alert, config);
         sentAlerts.push(alert);
       } else {
@@ -206,7 +205,6 @@ async function fetchUsers(config) {
   url.searchParams.set('status_id', 'open');
   url.searchParams.set('limit', '100');
   url.searchParams.set('sort', 'updated_on:desc');
-  console.log('[Redmine] Fetching assignees from issues:', url.toString());
 
   const response = await fetch(url.toString(), {
     headers: {
@@ -475,8 +473,6 @@ async function detectChanges(currentIssues, previousState, config) {
         const needsVerification = !prev.journalCountVerified || issueUpdated;
 
         if (needsVerification) {
-          console.log('[Redmine Notificações] Path B para #' + issue.id + ': verificando journals via detalhe...' +
-            (prev.journalCountVerified ? ' (issue atualizada)' : ' (baseline inicial)'));
           const detail = await fetchIssueDetail(config, issue.id);
           if (detail?.journals) {
             const detailCount = detail.journals.length;
@@ -489,7 +485,6 @@ async function detectChanges(currentIssues, previousState, config) {
               const comments = newJournals.filter(j => j.notes && j.notes.trim().length > 0);
               if (comments.length > 0) {
                 const lastComment = comments[comments.length - 1];
-                console.log('[Redmine Notificações] Path B: novo comentário detectado em #' + issue.id + ' (' + prevJournalCount + ' → ' + detailCount + ')');
                 alerts.push({
                   type: 'new_comment',
                   issue,
@@ -497,7 +492,7 @@ async function detectChanges(currentIssues, previousState, config) {
                 });
               }
             } else if (!prev.journalCountVerified) {
-              console.log('[Redmine Notificações] Path B: baseline estabelecido para #' + issue.id + ' (' + detailCount + ' journals)');
+              // Se não tnha baseline verificado, não alertar, apenas registrar a contagem para futuras comparações 
             }
           }
         }
