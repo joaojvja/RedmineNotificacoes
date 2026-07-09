@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Redmine Notificações",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Notificações inteligentes para suas demandas no Redmine — prazos, status, prioridade e comentários.",
   "permissions": [
     "alarms",
