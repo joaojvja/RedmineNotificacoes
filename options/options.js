@@ -65,10 +65,6 @@ async function saveSettings(e) {
 
   await chrome.storage.sync.set(settings);
 
-  // Atualizar intervalo do alarme
-  await chrome.alarms.clear('redmine-check');
-  await chrome.alarms.create('redmine-check', { periodInMinutes: settings.checkInterval });
-
   showSaveStatus('✅ Configurações salvas com sucesso!');
 }
 

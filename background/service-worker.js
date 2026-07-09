@@ -1,16 +1,19 @@
 const ALARM_NAME = 'redmine-check';
-const CHECK_INTERVAL_MINUTES = 5;
+const DEFAULT_INTERVAL_MINUTES = 5;
 
 //Inicialização
 chrome.runtime.onInstalled.addListener(async () => {
-  chrome.alarms.create(ALARM_NAME, { periodInMinutes: CHECK_INTERVAL_MINUTES });
-  console.log('[Redmine Notificações] Extension installed/reloaded. Running silent sync...');
+  const { checkInterval } = await chrome.storage.sync.get({ checkInterval: DEFAULT_INTERVAL_MINUTES });
+  chrome.alarms.create(ALARM_NAME, { periodInMinutes: checkInterval });
+  console.log('[Redmine Notificações] Extension installed/reloaded. Alarm set to', checkInterval, 'min. Running silent sync...');
   await silentSync();
 });
 
 //Re-verificação quando o service worker inicia (ex: após idle/encerramento)
 chrome.runtime.onStartup.addListener(async () => {
-  console.log('[Redmine Notificações] Browser/SW startup. Running silent sync...');
+  const { checkInterval } = await chrome.storage.sync.get({ checkInterval: DEFAULT_INTERVAL_MINUTES });
+  chrome.alarms.create(ALARM_NAME, { periodInMinutes: checkInterval });
+  console.log('[Redmine Notificações] Browser/SW startup. Alarm set to', checkInterval, 'min. Running silent sync...');
   await silentSync();
 });
 
@@ -27,7 +30,7 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 
   // Atualizar intervalo do alarme se mudou
   if (changes.checkInterval) {
-    const newInterval = changes.checkInterval.newValue || CHECK_INTERVAL_MINUTES;
+    const newInterval = changes.checkInterval.newValue || DEFAULT_INTERVAL_MINUTES;
     await chrome.alarms.clear(ALARM_NAME);
     await chrome.alarms.create(ALARM_NAME, { periodInMinutes: newInterval });
     console.log('[Redmine Notificações] Alarm updated to', newInterval, 'min.');
@@ -90,7 +93,8 @@ async function checkRedmine() {
     }
 
     const alerts = await detectChanges(issues, previousState, config);
-    console.log('[Redmine Notificações] Alerts generated:', alerts.map(a => `${a.type} #${a.issue.id}`));
+    const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    console.log(`[Redmine Notificações] [${now}] Alerts generated:`, alerts.map(a => `${a.type} #${a.issue.id}`));
 
     // Atualizar badge
     const urgentCount = issues.filter(i => isUrgent(i)).length;
