@@ -401,11 +401,18 @@ function createIssueCard(issue) {
       </div>
     </div>
     <div class="issue-subject">${escapeHtml(issue.subject)}</div>
-    <div class="issue-meta">
-      <span>📊 ${escapeHtml(issue.status?.name || '')}</span>
-      ${issue.assigned_to ? `<span>👤 ${escapeHtml(issue.assigned_to.name)}</span>` : ''}
-      ${issue.done_ratio ? `<span>✅ ${issue.done_ratio}%</span>` : ''}
-      ${dueBadge}
+
+    <div class="issue-meta-main">
+      <div class="issue-meta">
+        ${issue.tracker ? `<span>🏷️ ${escapeHtml(issue.tracker.name)}</span>` : ''} 
+        <span>📊 ${escapeHtml(issue.status?.name || '')}</span>
+      </div>
+
+      <div class="issue-meta">
+        ${issue.assigned_to ? `<span>👤 ${escapeHtml(issue.assigned_to.name)}</span>` : ''}
+        ${issue.done_ratio ? `<span>✅ ${issue.done_ratio}%</span>` : ''}
+        ${dueBadge}
+      </div>
     </div>
   `;
 
@@ -556,6 +563,12 @@ async function loadGeneralIssues() {
       sort: 'updated_on:desc'
     };
 
+    // Aplicar filtro de exclusão de trackers
+    const settings = await chrome.storage.sync.get({ excludeTrackers: [] });
+    if (settings.excludeTrackers.length > 0) {
+      params.tracker_id = '!' + settings.excludeTrackers.join('|');
+    }
+
     // Se a busca é um número
     if (filters.query && /^\d+$/.test(filters.query)) {
       try {
@@ -634,6 +647,12 @@ async function loadGeneralStats() {
     const statusId = document.getElementById('filter-status').value;
     const assigneeId = document.getElementById('filter-assignee').value;
     const dueFilter = document.getElementById('filter-due').value;
+
+    // Aplicar filtro de exclusão de trackers nas estatísticas
+    const statsSettings = await chrome.storage.sync.get({ excludeTrackers: [] });
+    if (statsSettings.excludeTrackers.length > 0) {
+      baseParams.tracker_id = '!' + statsSettings.excludeTrackers.join('|');
+    }
 
     if (query) baseParams.subject = `~${query}`;
     if (projectId) baseParams.project_id = projectId;

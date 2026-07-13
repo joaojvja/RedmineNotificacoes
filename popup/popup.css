@@ -240,8 +240,13 @@ html, body {
 .issue-subject {
   font-weight: 600;
   font-size: 13px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   line-height: 1.3;
+}
+.issue-meta-main{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .issue-meta {

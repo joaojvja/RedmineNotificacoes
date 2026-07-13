@@ -1,4 +1,7 @@
-document.addEventListener('DOMContentLoaded', loadSettings);
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadSettings();
+  await loadTrackers();
+});
 
 document.getElementById('settings-form').addEventListener('submit', saveSettings);
 document.getElementById('btn-test').addEventListener('click', testConnection);
@@ -14,7 +17,8 @@ async function loadSettings() {
     notifyPriority: true,
     notifyComments: true,
     notifyNewAssignment: true,
-    filterGroups: false
+    filterGroups: false,
+    excludeTrackers: []
   });
 
   document.getElementById('redmine-url').value = settings.redmineUrl;
@@ -50,6 +54,10 @@ async function saveSettings(e) {
     }
   }
 
+  // Coletar trackers excluídos
+  const excludeTrackers = [...document.querySelectorAll('#exclude-trackers-list input[type="checkbox"]:checked')]
+    .map(cb => parseInt(cb.value));
+
   const settings = {
     redmineUrl: rawUrl,
     apiKey: document.getElementById('api-key').value.trim(),
@@ -60,7 +68,8 @@ async function saveSettings(e) {
     notifyPriority: document.getElementById('notify-priority').checked,
     notifyComments: document.getElementById('notify-comments').checked,
     notifyNewAssignment: document.getElementById('notify-assignment').checked,
-    filterGroups: document.getElementById('filter-groups').checked
+    filterGroups: document.getElementById('filter-groups').checked,
+    excludeTrackers: excludeTrackers
   };
 
   await chrome.storage.sync.set(settings);
@@ -135,4 +144,40 @@ function showSaveStatus(message) {
   el.textContent = message;
   el.classList.remove('hidden');
   setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+async function loadTrackers() {
+  const settings = await chrome.storage.sync.get({ redmineUrl: '', apiKey: '', excludeTrackers: [] });
+  const url = settings.redmineUrl;
+  const apiKey = settings.apiKey;
+  const container = document.getElementById('exclude-trackers-list');
+
+  if (!url || !apiKey) return;
+
+  try {
+    const response = await fetch(`${url}/trackers.json`, {
+      headers: { 'X-Redmine-API-Key': apiKey, 'Content-Type': 'application/json' }
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    const trackers = (data.trackers || []).sort((a, b) => a.name.localeCompare(b.name));
+
+    if (trackers.length === 0) return;
+
+    container.innerHTML = '';
+    trackers.forEach(tracker => {
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = tracker.id;
+      cb.checked = settings.excludeTrackers.includes(tracker.id);
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(` ${tracker.name}`));
+      container.appendChild(label);
+    });
+  } catch (e) {
+    // Falha silenciosa — o usuário pode não ter conectado ainda
+  }
 }
