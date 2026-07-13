@@ -447,12 +447,37 @@ function populateProjectFilter(issues) {
     }
   });
   select.innerHTML = '<option value="">Todos projetos</option>';
-  projectMap.forEach((name, id) => {
+  const sorted = [...projectMap.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  sorted.forEach(([id, name]) => {
     const opt = document.createElement('option');
     opt.value = id;
     opt.textContent = name;
     select.appendChild(opt);
   });
+}
+
+async function populateAllProjectsFilter() {
+  const select = document.getElementById('filter-project');
+  select.innerHTML = '<option value="">Todos projetos</option>';
+
+  try {
+    const data = await apiFetch('/users/current.json', { include: 'memberships' });
+    const memberships = data.user?.memberships || [];
+
+    const projects = memberships
+      .filter(m => m.project?.id && m.project?.name)
+      .map(m => ({ id: m.project.id, name: m.project.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    projects.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = String(p.id);
+      opt.textContent = p.name;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    // Fallback: manter apenas "Todos projetos"
+  }
 }
 
 function applyFilters() {
@@ -579,7 +604,7 @@ async function loadGeneralIssues() {
     }
 
     if (!generalFiltersPopulated) {
-      populateProjectFilter(allGeneralIssues);
+      populateAllProjectsFilter();
       populateAssigneeFilter();
       populateStatusFilter();
       generalFiltersPopulated = true;
@@ -694,17 +719,31 @@ async function populateStatusFilter() {
 }
 
 async function populateAssigneeFilter() {
+  const select = document.getElementById('filter-assignee');
+  select.innerHTML = '<option value="">Responsável</option>';
+
   try {
-    // Obter responsáveis das issues abertas
-    const data = await apiFetch('/issues.json', { status_id: 'open', limit: '100', sort: 'updated_on:desc' });
     const userMap = new Map();
-    (data.issues || []).forEach(issue => {
-      if (issue.assigned_to?.id && issue.assigned_to?.name) {
-        userMap.set(String(issue.assigned_to.id), issue.assigned_to.name);
-      }
-    });
-    const select = document.getElementById('filter-assignee');
-    select.innerHTML = '<option value="">Responsável</option>';
+    let offset = 0;
+    const limit = 100;
+    let totalCount = 0;
+
+    do {
+      const data = await apiFetch('/issues.json', {
+        status_id: 'open',
+        limit: String(limit),
+        offset: String(offset),
+        sort: 'updated_on:desc'
+      });
+      totalCount = data.total_count || 0;
+      (data.issues || []).forEach(issue => {
+        if (issue.assigned_to?.id && issue.assigned_to?.name) {
+          userMap.set(String(issue.assigned_to.id), issue.assigned_to.name);
+        }
+      });
+      offset += limit;
+    } while (offset < totalCount && offset < 500);
+
     const sorted = [...userMap.entries()].sort((a, b) => a[1].localeCompare(b[1]));
     sorted.forEach(([id, name]) => {
       const opt = document.createElement('option');
